@@ -1,16 +1,19 @@
 # Building a chatbot with Deep NLP
 
-### importing libraries  
+### importing the libraries  
 import numpy as np
 import tensorflow as tf
 import re
 import time
 
-### PART 1 : data preprocessing 
+
+""" PART 1 : data preprocessing """ 
+
 
 ## Importing the dataset
 lines           = open('movie_lines.txt', encoding = 'utf-8', errors = 'ignore', ).read().split('\n')
 conversations   = open('movie_conversations.txt', encoding = 'utf-8', errors = 'ignore', ).read().split('\n')
+
 
 ## Creating a dictionary that maps each line and its id
 id2line = {}
@@ -20,8 +23,136 @@ for line in lines:
         id2line[_line[0]] = _line[-1]    
         
         
+## Creating a list of all conversations
 conversations_ids = []
 for conversation in conversations[:-1]:
     _conversation = conversation.split(' +++$+++ ')[-1][1:-1].replace("'", "").replace(" ", "")
     conversations_ids.append(_conversation.split(","))
     
+    
+## Getting separatly the questions and answers
+questions   =   []
+answers     =   []
+
+for conversation in conversations_ids:
+    for line_index in range(len(conversation) - 1):
+        questions.append(id2line[conversation[line_index]])
+        answers.append(id2line[conversation[line_index + 1]])
+        
+        
+## Doing first cleaning of the text
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r"i'm", "i am", text)
+    text = re.sub(r"he's", "he is", text)
+    text = re.sub(r"she's", "she is", text)
+    text = re.sub(r"it's", "it is", text)
+    
+    text = re.sub(r"\'re", " are", text)
+    text = re.sub(r"\'d", " would", text)
+    
+    text = re.sub(r"\'ll", " will", text)
+    text = re.sub(r"\'ve", " have", text)
+    
+    text = re.sub(r"that's", "that is", text)
+    text = re.sub(r"there's", "there is", text)
+    text = re.sub(r"what's", "what is", text)
+    text = re.sub(r"where's", "where is", text)
+    
+    text = re.sub(r"don't", "do not", text)
+    text = re.sub(r"won't", "will not", text)
+    text = re.sub(r"can't", "connot", text)
+    
+    text = re.sub(r"[-{}#&^*~=|?<>;:.@/\",%]", "", text)
+    
+    return text
+
+
+## Cleaning questions
+clean_questions = []
+for question in questions:
+    clean_questions.append(clean_text(question))
+    
+    
+## Cleaning answers
+clean_answers = []
+for answer in answers:
+    clean_answers.append(clean_text(answer))
+
+
+## Creating a dictionary that maps each word to its number of occurencies
+word2count = {}
+for question in clean_questions:
+    for word in question.split():
+        if word not in word2count:
+            word2count[word] = 1
+        else:
+            word2count[word] += 1
+            
+for answer in clean_answers:
+    for word in answer.split():
+        if word not in word2count:
+            word2count[word] = 1
+        else:
+            word2count[word] += 1
+            
+            
+## Creating two dictionaries that map the questions words and the answers words to a unique integer
+threshold = 20
+
+word_number = 0
+questionswords2int = {}
+for word, count in word2count.items():
+    if count >= threshold:
+        questionswords2int[word] = word_number
+        word_number += 1
+
+word_number = 0
+answerswords2int = {}
+for word, count in word2count.items():
+    if count >= threshold:
+        answerswords2int[word] = word_number
+        word_number += 1
+
+## Adding last tokens
+tokens = ['<EOS>', '<PAD>', '<OUT>', '<SOS>']
+for token in tokens:
+    questionswords2int[token] = len(questionswords2int) + 1
+    answerswords2int[token]   = len(answerswords2int) + 1
+
+
+## Creating the inverse dictionary of answerswords2int    
+answersints2word = {word_index : word for word, word_index in answerswords2int.items()}
+
+
+## Addind EOS to clean answers
+for i in range(len(clean_answers)):
+    clean_answers[i] += clean_answers[i] + ' <EOS>'
+    
+## Translating all the questions and answers to integers
+translated_questions = []
+for question in clean_questions:
+    translated_question = []
+    for word in question.split():
+        if word in questionswords2int.keys():
+            translated_question.append(questionswords2int[word])
+    translated_questions.append(translated_question)
+
+translated_answers = []
+for answer in clean_answers:
+    translated_answer = []
+    for word in answer.split():
+        if word in answerswords2int.keys():
+            translated_answer.append(answerswords2int[word])
+    translated_answers.append(translated_answer)
+    
+
+## Sorting questions and answers by the length of questions
+sorted_clean_questions = []
+sorted_clean_answers   = []
+
+for length in range(1, 25 + 1):
+    for i in enumerate(translated_questions):
+        if len(i[1]) == length:
+            sorted_clean_questions.append(i[1])
+            sorted_clean_answers.append(translated_answers[i[0]])
