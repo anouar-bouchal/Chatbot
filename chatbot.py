@@ -144,8 +144,8 @@ for answer in clean_answers:
     for word in answer.split():
         if word in answerswords2int.keys():
             translated_answer.append(answerswords2int[word])
-    translated_answers.append(translated_answer)
-    
+    translated_answers.append(translated_answer)    
+
 
 ## Sorting questions and answers by the length of questions
 sorted_clean_questions = []
@@ -177,7 +177,7 @@ def preprocess_targets(targets, word2int, batch_size):
     return preprocessed_targets
 
 ## Creating the Encoder RNN Layer
-def encoder_rnn_layer(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
+def encoder_rnn(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
     lstm                = tf.contrib.rnn.BasicLSTMCell(rnn_size)
     lstm_dropout        = tf.contrib.rnn.DropoutWrapper(lstm, input_keep_prob=keep_prob)
     encoder_cell        = tf.contrib.rnn.MultiRNNCell([lstm_dropout] * num_layers)
@@ -198,7 +198,7 @@ def decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, seq
                                                                               attention_values,
                                                                               attention_score_function,
                                                                               attention_construct_function,
-                                                                              name="attention_dec_train")
+                                                                              name="attn_dec_train")
     #Need decoder_output only (1st variable)
     decoder_output, decoder_final_state, decoder_final_contexte_state = tf.contrib.seq2seq.dynamic_rnn_decoder(decoder_cell,
                                                                                                                training_decoder_function,
@@ -207,3 +207,26 @@ def decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, seq
                                                                                                                scope=decoding_scope)
     decoder_output_dropout = tf.nn.dropout(decoder_output, keep_prob)
     return output_function(decoder_output_dropout)
+
+
+## Decoding the test/validation set 
+def decode_test_set(encoder_state, decoder_cell, decoder_embedding_matrix, sos_id, eos_id, maximum_length, num_words, sequence_length, decoding_scope, output_function, keep_prob, batch_size):
+    attention_states = tf.zeros([batch_size, 1, decoder_cell.output_size])
+    attention_keys, attention_values, attention_score_function, attention_construct_function = tf.contrib.seq2seq.prepare_attention(attention_states, attention_option = 'bahdanau', num_units=decoder_cell.output_size)
+    test_decoder_function = tf.contrib.seq2seq.attention_decoder_fn_inference(output_function,
+                                                                              encoder_state[0],
+                                                                              attention_keys,
+                                                                              attention_values,
+                                                                              attention_score_function,
+                                                                              attention_construct_function,
+                                                                              decoder_embedding_matrix, 
+                                                                              sos_id,
+                                                                              eos_id,
+                                                                              maximum_length,
+                                                                              num_words,
+                                                                              name="attn_dec_inf")
+    #Need test_predections only (1st variable)
+    test_predections, decoder_final_state, decoder_final_contexte_state = tf.contrib.seq2seq.dynamic_rnn_decoder(decoder_cell,
+                                                                                                                 test_decoder_function,
+                                                                                                                 scope=decoding_scope)
+    return test_predections
